@@ -1,11 +1,30 @@
-import discord
-from discord.ext import commands, tasks
+import os
+import json
 import datetime
 import pytz
-import json
-import os
 
-print("🚀 Начало запуска бота на Render...")
+print("🚀 Проверка окружения...")
+
+# Проверяем Python версию
+import sys
+print(f"Python version: {sys.version}")
+
+# Проверяем переменные окружения
+token = os.environ.get('DISCORD_TOKEN')
+print(f"DISCORD_TOKEN: {'✅ Найден' if token else '❌ Не найден'}")
+
+if not token:
+    print("❌ Токен не найден! Добавьте DISCORD_TOKEN в Environment Variables")
+    sys.exit(1)
+
+# Импортируем discord только после проверки
+try:
+    import discord
+    from discord.ext import commands, tasks
+    print("✅ Discord.py загружен успешно")
+except ImportError as e:
+    print(f"❌ Ошибка импорта: {e}")
+    sys.exit(1)
 
 # Настройки
 MOSCOW_TZ = pytz.timezone('Europe/Moscow')
@@ -16,7 +35,6 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# Переменные
 AUTO_CHANNEL_ID = None
 
 def load_data():
@@ -35,7 +53,7 @@ def save_data(data):
     except Exception as e:
         print(f"Ошибка сохранения: {e}")
 
-# Простые задачи для активности
+# Простые задачи
 @tasks.loop(minutes=5)
 async def keep_alive():
     print(f"✅ Активность: {datetime.datetime.now(MOSCOW_TZ).strftime('%H:%M:%S')}")
@@ -46,17 +64,15 @@ async def check_reminders():
     if not data["reminders"]:
         return
     
-    moscow_time = datetime.datetime.now(MOSCOW_TZ)
-    current_time = moscow_time.strftime("%H:%M")
+    current_time = datetime.datetime.now(MOSCOW_TZ).strftime("%H:%M")
     
     for reminder in data["reminders"]:
         if reminder["time"] == current_time and reminder["active"]:
             try:
                 user = await bot.fetch_user(reminder["user_id"])
                 await user.send(f"⏰ Напоминание: {reminder['message']}")
-                print(f"✅ Отправлено: {reminder['message']}")
-            except Exception as e:
-                print(f"❌ Ошибка: {e}")
+            except:
+                pass
 
 @tasks.loop(minutes=30)
 async def bonus_reminder():
@@ -72,19 +88,16 @@ async def bonus_reminder():
 
 @bot.event
 async def on_ready():
-    print(f'🎉 Бот {bot.user} запущен на Render!')
+    print(f'🎉 Бот {bot.user} запущен!')
     
     # Запускаем задачи
-    if not keep_alive.is_running():
-        keep_alive.start()
-    if not check_reminders.is_running():
-        check_reminders.start()
-    if not bonus_reminder.is_running():
-        bonus_reminder.start()
+    for task in [keep_alive, check_reminders, bonus_reminder]:
+        if not task.is_running():
+            task.start()
     
-    print("💡 Бот работает 24/7!")
+    print("💡 Бот работает 24/7 на Render!")
 
-# Основные команды
+# Команды
 @bot.command()
 async def готово(ctx):
     data = load_data()
@@ -113,6 +126,8 @@ async def добавить(ctx, время: str, *, текст: str):
             })
             save_data(data)
             await ctx.send(f"✅ Напоминание добавлено! ID: {new_id}")
+        else:
+            await ctx.send("❌ Неверное время!")
     except:
         await ctx.send("❌ Ошибка! Используйте: !добавить 14:30 Текст")
 
@@ -136,16 +151,9 @@ async def тест(ctx):
 async def помощь(ctx):
     await ctx.send("**Команды:** !добавить 14:30 Текст, !список, !готово, !включить, !тест")
 
-# Запуск бота
-print("🔍 Проверка токена...")
-token = os.environ.get('DISCORD_TOKEN')
-
-if token:
-    print("✅ Токен найден, запускаем бота...")
-    try:
-        bot.run(token)
-    except Exception as e:
-        print(f"❌ Ошибка запуска: {e}")
-else:
-    print("❌ ТОКЕН НЕ НАЙДЕН!")
-    print("Добавьте DISCORD_TOKEN в Environment Variables на Render")
+# Запуск
+print("🚀 Запуск бота...")
+try:
+    bot.run(token)
+except Exception as e:
+    print(f"❌ Критическая ошибка: {e}")
